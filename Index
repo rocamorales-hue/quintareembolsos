@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Control de Gastos - Quinta Bugambilia</title>
+  
+  <!-- CSS de Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- SweetAlert2 para notificaciones -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .card { border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: none; }
+    .header-title { color: #2c3e50; font-weight: 700; }
+    .badge-Pagado { background-color: #198754; }
+    .badge-Parcial { background-color: #fd7e14; }
+    .badge-Pendiente { background-color: #dc3545; }
+    .table-container { max-height: 500px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+
+<div class="container py-4">
+  <h2 class="text-center mb-4 header-title">🌿 Quinta Bugambilia - Finanzas</h2>
+
+  <div class="row g-4 mb-4">
+    <!-- Formulario de Gastos -->
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header bg-primary text-white font-weight-bold rounded-top">
+          📤 Registrar Nuevo Gasto
+        </div>
+        <div class="card-body">
+          <form id="formGasto">
+            <div class="mb-3">
+              <label class="form-label">Fecha del Gasto</label>
+              <input type="date" class="form-control" id="fechaGasto" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Concepto (¿En qué se gastó?)</label>
+              <input type="text" class="form-control" id="conceptoGasto" placeholder="Ej. Cloro para alberca, Pintura..." required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Monto Pagado ($)</label>
+              <input type="number" step="0.01" class="form-control" id="montoGasto" placeholder="0.00" required>
+            </div>
+            <button type="button" class="btn btn-primary w-100" onclick="guardarGasto()">Guardar Gasto</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Formulario de Reembolsos -->
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-header bg-success text-white font-weight-bold rounded-top">
+          📥 Registrar Reembolso / Abono
+        </div>
+        <div class="card-body">
+          <form id="formReembolso">
+            <div class="mb-3">
+              <label class="form-label">Fecha del Reembolso</label>
+              <input type="date" class="form-control" id="fechaReembolso" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Monto Depositado ($)</label>
+              <input type="number" step="0.01" class="form-control" id="montoReembolso" placeholder="0.00" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notas o Referencia</label>
+              <input type="text" class="form-control" id="notasReembolso" placeholder="Ej. Transferencia Banorte">
+            </div>
+            <button type="button" class="btn btn-success w-100" onclick="procesarReembolso()">Aplicar a Deudas</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla Histórica -->
+  <div class="card">
+    <div class="card-header bg-dark text-white font-weight-bold rounded-top">
+      📊 Historial y Estatus de Gastos
+    </div>
+    <div class="card-body p-0 table-container">
+      <table class="table table-hover table-striped mb-0 text-center">
+        <thead class="table-light sticky-top">
+          <tr>
+            <th>Fecha</th>
+            <th>Concepto</th>
+            <th>Costo Original</th>
+            <th>Abonado</th>
+            <th>Saldo Pendiente</th>
+            <th>Estatus</th>
+          </tr>
+        </thead>
+        <tbody id="tablaGastos">
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">Cargando datos...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Tu nuevo enlace de la API de Google Apps Script
+  const API_URL = "https://script.google.com/macros/s/AKfycbz-IgvNztN2FAmFc13XDjqtu-fRxNnOihXTWlTDfSqBVIepK8FpiommOCU6YOU9gUBB/exec";
+
+  // Al cargar la página, ponemos la fecha de hoy y cargamos la tabla
+  document.addEventListener('DOMContentLoaded', function() {
+    const hoy = new Date().toISOString().split('T')[0];
+    document.getElementById('fechaGasto').value = hoy;
+    document.getElementById('fechaReembolso').value = hoy;
+    cargarTabla();
+  });
+
+  function cargarTabla() {
+    fetch(API_URL + "?action=obtenerGastos")
+      .then(res => res.json())
+      .then(response => {
+        if(response.status === 'success') {
+          mostrarDatosEnTabla(response.data);
+        } else {
+          Swal.fire('Error', response.message, 'error');
+        }
+      })
+      .catch(err => Swal.fire('Error', 'Falla de conexión: ' + err.message, 'error'));
+  }
+
+  function mostrarDatosEnTabla(gastos) {
+    const tbody = document.getElementById('tablaGastos');
+    tbody.innerHTML = ''; 
+
+    if (gastos.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No hay gastos registrados aún.</td></tr>';
+      return;
+    }
+
+    let html = '';
+    gastos.reverse().forEach(fila => {
+      const fecha = new Date(fila[1]).toLocaleDateString('es-MX');
+      const estatus = fila[6];
+      const badgeClass = 'badge-' + estatus; 
+      
+      html += `
+        <tr>
+          <td>${fecha}</td>
+          <td class="text-start">${fila[2]}</td>
+          <td>$${parseFloat(fila[3]).toFixed(2)}</td>
+          <td>$${parseFloat(fila[4]).toFixed(2)}</td>
+          <td class="text-danger fw-bold">$${parseFloat(fila[5]).toFixed(2)}</td>
+          <td><span class="badge ${badgeClass}">${estatus}</span></td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+  }
+
+  function guardarGasto() {
+    const fecha = document.getElementById('fechaGasto').value;
+    const concepto = document.getElementById('conceptoGasto').value;
+    const monto = document.getElementById('montoGasto').value;
+
+    if (!fecha || !concepto || !monto) {
+      return Swal.fire('Atención', 'Por favor llena todos los campos del gasto.', 'warning');
+    }
+
+    Swal.fire({ title: 'Guardando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "registrarGasto", fecha, concepto, monto })
+    })
+    .then(res => res.json())
+    .then(response => {
+      if(response.status === 'success') {
+        document.getElementById('conceptoGasto').value = '';
+        document.getElementById('montoGasto').value = '';
+        Swal.fire('¡Éxito!', 'Gasto registrado correctamente.', 'success');
+        cargarTabla();
+      } else {
+        Swal.fire('Error', response.message, 'error');
+      }
+    })
+    .catch(err => Swal.fire('Error', 'No se pudo guardar: ' + err.message, 'error'));
+  }
+
+  function procesarReembolso() {
+    const fecha = document.getElementById('fechaReembolso').value;
+    const monto = document.getElementById('montoReembolso').value;
+    const notas = document.getElementById('notasReembolso').value;
+
+    if (!fecha || !monto) {
+      return Swal.fire('Atención', 'Indica la fecha y el monto del reembolso.', 'warning');
+    }
+
+    Swal.fire({ title: 'Calculando abonos en cascada...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+
+    fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "registrarReembolso", fecha, monto, notas })
+    })
+    .then(res => res.json())
+    .then(response => {
+      if(response.status === 'success') {
+        document.getElementById('montoReembolso').value = '';
+        document.getElementById('notasReembolso').value = '';
+        
+        if (response.saldoRestante > 0) {
+          Swal.fire('¡Abonos Aplicados!', `Se liquidaron las deudas posibles. Quedó un saldo a favor de: $${response.saldoRestante.toFixed(2)}`, 'info');
+        } else {
+          Swal.fire('¡Abonos Aplicados!', 'El reembolso se distribuyó en tus gastos exitosamente.', 'success');
+        }
+        cargarTabla();
+      } else {
+        Swal.fire('Error', response.message, 'error');
+      }
+    })
+    .catch(err => Swal.fire('Error', 'No se pudo procesar: ' + err.message, 'error'));
+  }
+</script>
+
+</body>
+</html>
